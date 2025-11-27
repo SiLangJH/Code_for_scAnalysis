@@ -15,7 +15,7 @@ library(patchwork)
 library(RColorBrewer)
 library(DoubletFinder)
 
-selsample <- "PSMD"
+selsample <- "ACE"
 # ==== 加载数据 ====
 seurat_obj <- Read10X(data.dir = file.path("./gnome", selsample))
 seurat_obj <- CreateSeuratObject(seurat_obj, project = selsample, min.cells = 10, min.features = 50)
@@ -49,7 +49,7 @@ viz <- visualize_pc_selection(
   max_pcs = 50)
 # 根据图表选择合适的PC数
 # 图1绿色数字提示为建议选择PC
-best_pcs=18
+best_pcs=16
 #Principal Component Selection
 #To determine the optimal number of principal components for downstream analysis, we employed the scPCselect package (version 0.1.0, https://github.com/xiaoqqjun/scPCselect), which provides comprehensive diagnostic visualizations including elbow plots, cumulative variance analysis, marginal gain assessment, and curvature detection. Based on the integrated recommendations considering 80% variance threshold and marginal gain analysis, we selected 30 principal components for subsequent clustering and visualization steps.
 
@@ -65,15 +65,22 @@ summarize_pK=summarizeSweep(possible_pK,GT = F)
 #选 BCmetric 最高的 pK（BCmetric = MeanBC / VarBC，越大说明均值高且波动小，模型最稳健）。
 best_pK=find.pK(summarize_pK)
 best_pK
-best_pK=0.26
+best_pK=0.3
 # 标记双细胞并且查看结果
 nExp=round(0.08*ncol(seurat_obj)) # 华大C4平台的估计双细胞数目
 seurat_obj=DoubletFinder::doubletFinder(seurat_obj,PCs = 1:best_pcs,pN = 0.25,pK = best_pK,
                                         nExp = nExp,sct = F)
 colnames(seurat_obj@meta.data)
-table(seurat_obj@meta.data[["DF.classifications_0.25_0.26_533"]])
-seurat_obj=subset(seurat_obj,DF.classifications_0.25_0.26_533=="Singlet")
+
+##自动找到 DF.classifications 列
+dfCol <- colnames(seurat_obj@meta.data)[grepl("^DF\\.classifications", colnames(seurat_obj@meta.data))]
+##查看双/单细胞数目
+table(seurat_obj@meta.data[[dfCol]])
+#去掉双细胞
+singlet_cells <- rownames(seurat_obj@meta.data)[seurat_obj@meta.data[[dfCol]] == "Singlet"]
+seurat_obj <- subset(seurat_obj, cells = singlet_cells)
 print(seurat_obj)
+
 #为保证可复现，建议在保存前把关键参数写入 seurat_obj@misc，例如：
 seurat_obj@misc$qc_params <- list(
   nFeature_min = 500,
