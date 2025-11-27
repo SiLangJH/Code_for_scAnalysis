@@ -1,0 +1,89 @@
+# ==== 加载配置和工作环境 ====
+Sys.setenv(LANGUAGE = "en")
+options(stringsAsFactors = FALSE)
+rm(list=ls())
+gc()
+setwd("~/Biostudy/ACE_AI")
+getwd()
+library(qs)
+library(dplyr)
+library(Seurat)
+library(ggpubr)
+library(cowplot)
+library(ggplot2)
+library(patchwork)
+library(RColorBrewer)
+library(DoubletFinder)
+
+selsample <- "PSMD"
+# ==== 加载数据 ====
+seurat_obj <- Read10X(data.dir = file.path("./gnome", selsample))
+seurat_obj <- CreateSeuratObject(seurat_obj, project = selsample, min.cells = 10, min.features = 50)
+
+# ==== 质量控制_去除低质量的细胞 ====
+## 计算线粒体基因占比
+seurat_obj[["percent_mt"]]=PercentageFeatureSet(seurat_obj,pattern = "^mt-")
+## 计算核糖体基因占比
+seurat_obj[["percent_ribo"]]=PercentageFeatureSet(seurat_obj, pattern = "^Rpl|^Rps")
+# 计算红细胞基因占比
+seurat_obj[["percent_RBC"]] <- PercentageFeatureSet(seurat_obj, pattern = "^Hba|^Hbb")
+# 绘制小提琴图
+VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent_mt", "percent_RBC"), 
+        pt.size = 0,ncol = 2)
+# 进行质控，标准如下
+seurat_obj=subset(seurat_obj,subset = nFeature_RNA>500 & percent_mt<20  & percent_RBC<1)
+print(seurat_obj)
+VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent_mt"), 
+        pt.size = 0,ncol = 3)
+
+# 简单跑一下流程
+seurat_obj=NormalizeData(seurat_obj,normalization.method = "LogNormalize",
+                         scale.factor = median(seurat_obj@meta.data$nCount_RNA)) %>% FindVariableFeatures() %>% 
+  ScaleData() %>% RunPCA() 
+
+#https://mp.weixin.qq.com/s/vdZEJrZHxdBri4-i1q1SKw
+#
+library(scPCselect)
+viz <- visualize_pc_selection(
+  seurat_obj,
+  max_pcs = 50)
+# 根据图表选择合适的PC数
+# 图1绿色数字提示为建议选择PC
+best_pcs=18
+#Principal Component Selection
+#To determine the optimal number of principal components for downstream analysis, we employed the scPCselect package (version 0.1.0, https://github.com/xiaoqqjun/scPCselect), which provides comprehensive diagnostic visualizations including elbow plots, cumulative variance analysis, marginal gain assessment, and curvature detection. Based on the integrated recommendations considering 80% variance threshold and marginal gain analysis, we selected 30 principal components for subsequent clustering and visualization steps.
+
+##需要根据上面的值修改下面的PC数
+
+seurat_obj=RunUMAP(seurat_obj,dims=1:best_pcs)
+# 找合适的pK数,这行代码是用来 为单细胞数据“双细胞过滤”（doublet detection）做参数扫描，找出最合适的 pK 值，以便后续运行 doubletFinder()。
+possible_pK=paramSweep(seurat_obj,PCs=1:best_pcs,sct = F)
+## PCs：主成分，上面的值
+## sct：有没有使用SCTransform算法
+summarize_pK=summarizeSweep(possible_pK,GT = F)
+## GT：ground truth，有没有人工标记出单细胞，大多数数据都没有，所以F
+#选 BCmetric 最高的 pK（BCmetric = MeanBC / VarBC，越大说明均值高且波动小，模型最稳健）。
+best_pK=find.pK(summarize_pK)
+best_pK
+best_pK=0.26
+# 标记双细胞并且查看结果
+nExp=round(0.08*ncol(seurat_obj)) # 华大C4平台的估计双细胞数目
+seurat_obj=DoubletFinder::doubletFinder(seurat_obj,PCs = 1:best_pcs,pN = 0.25,pK = best_pK,
+                                        nExp = nExp,sct = F)
+colnames(seurat_obj@meta.data)
+table(seurat_obj@meta.data[["DF.classifications_0.25_0.26_533"]])
+seurat_obj=subset(seurat_obj,DF.classifications_0.25_0.26_533=="Singlet")
+print(seurat_obj)
+#为保证可复现，建议在保存前把关键参数写入 seurat_obj@misc，例如：
+seurat_obj@misc$qc_params <- list(
+  nFeature_min = 500,
+  percent_mt_max = 20,
+  percent_RBC_max = 1,
+  doublet_rate = 0.08,
+  pK = best_pK,
+  PCs = 1:best_pcs
+)
+
+
+qsave(seurat_obj, file = paste0(selsample, "_post_QC.qs"))
+
