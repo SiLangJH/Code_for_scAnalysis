@@ -92,8 +92,8 @@ top20 <- markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
 library(GPTCelltype)
 library(openai)
 top10_frame<-as.data.frame(top20)
-Sys.setenv(OPENAI_API_KEY='sk-fHwabKyTs013mTUf478b6b5eF100490396C88eB85b0686Ee')
-#Sys.setenv(OPENAI_API_BASE_URL = "http://sxycloud.cn:3000")
+Sys.setenv(OPENAI_API_KEY='**********')
+#Sys.setenv(OPENAI_API_BASE_URL = "*********")
 res <- gptcelltype(top10_frame, tissuename = "Mouse skeletal muscle", model = 'gpt-4-turbo')
 # 查看并修改res中某一个值
 res
