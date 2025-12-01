@@ -235,7 +235,7 @@ plot3=DotPlot(object = seurat_obj,
 plot2|plot3
 # 邱同学风格的细胞注释
 meta_supp = data.frame(seurat_cluster = 0:(length(unique(seurat_obj$seurat_clusters)) - 1), celltype = NA)
-meta_supp[meta_supp$seurat_cluster %in% c(0), 'celltype'] = 'Neutrophils' 
+meta_supp[meta_supp$seurat_cluster %in% c(0), 'celltype'] = 'Neutrophils' # "S100a8", "S100a9", "Csf3r"
 meta_supp[meta_supp$seurat_cluster %in% c(1), 'celltype'] = 'Mono/Macro' # "Csf1r", "Adgre1","Cd68
 meta_supp[meta_supp$seurat_cluster %in% c(2), 'celltype'] = 'B' #"Cd79a", "Ighm", "Cd19"
 meta_supp[meta_supp$seurat_cluster %in% c(3), 'celltype'] = 'GMP' # "Ms4a3", "Mpo", "Elane"
